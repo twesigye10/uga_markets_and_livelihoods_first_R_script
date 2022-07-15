@@ -1,0 +1,17 @@
+---
+title: "test"
+author: "Anthony Twesigye"
+date: "05/03/2021"
+output: html_document
+---
+
+
+
+```{r, include=FALSE, cache=FALSE}
+knitr::read_chunk("R/BHA_livelihood_analysis.R")
+
+```
+
+``` {r, chunck_HH_by_nationality, echo=TRUE}
+
+```

@@ -1,0 +1,10 @@
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+*.html
+inputs/*
+outputs/*
+cleaning/*
+support_files/*
+!/**/.gitkeep

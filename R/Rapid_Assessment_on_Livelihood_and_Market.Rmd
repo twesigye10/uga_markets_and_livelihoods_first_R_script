@@ -1,0 +1,1033 @@
+---
+title: "Rapid_Assessment_on_Livelihood_and_Market"
+author: "Anthony Twesigye"
+date: "04/03/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+## load packages
+library(tidyverse)
+library(lubridate)
+library(ggpubr)
+
+
+data_collection_start <- as_date("2021-02-15")
+
+df_raw <- read_csv(file = "./inputs/UGA2101a_Rapid_Assessment_on_Livelihood_and_Market_Strengthening_Opportunities_March2021_Data.csv")%>%
+    filter( today >= data_collection_start )
+
+```
+
+```{r, echo = TRUE}
+# adapting-new-variables -----------------------------------------------------
+df_add_new_variables <- df_raw %>% 
+  mutate(
+    i.income_cat = case_when(monthly_y %in%  c("less_equal_20000", "21000_50000") ~ "Very poor", 
+                             monthly_y %in%  c("51001_100000") ~ "Poor", 
+                             monthly_y %in%  c("100001_300000", "300001_500000") ~ "Middle", 
+                             monthly_y %in%  c("500001_1,000000") ~ "High", 
+                             monthly_y %in%  c("1000001_and_above") ~ "Higher" 
+    ),
+    i.education_cat = case_when(hoh_education %in%  c("no_formal_education") ~ "None", 
+                                hoh_education %in%  c("completed_primary", "incomplete_primary", "incomplete_secondary") ~ "Low", 
+                                hoh_education %in%  c("complete_secondary", "completed_university", "incomplete_voc_training", "completed_voc_training") ~ "Middle", 
+                                hoh_education %in%  c("completed_prof_degree") ~ "Higher", 
+                                hoh_education %in%  c("other") ~ "Other" 
+    ),
+    i.animal_sustain_hh_tf = animal_sustain_hh %in%  c("yes_through_animals", "no_through_other_sources"),
+    i.land_sustain_hh_tf = agric_land_adequate %in%  c("yes_met_hh_needs", "no_through_other_sources"),
+    i.subsistence_livestock_tf = puropse_keep_animals =="provide_food" ,
+    i.main_livelihood_agriculture = main_livelihood %in%  c("farming_own_land", "cash_crop_own_land", "subsistance_hired_land", "cash_crop_hired_land", "paid_agric_labor", "livestock", "fishing", "forestry")
+  ) %>% 
+  rowwise() %>% 
+  mutate(
+    int.hh_y_gender_male = sum(males_6_12_w, males_13_17_w, males_18_59_w, males_60_above_w, na.rm = T),
+    int.hh_y_gender_female = sum(females_6_12_w, females_13_17_w, females_18_59_w, females_60_above_w, na.rm = T),
+    int.seek_work_gender_male = sum(males_6_12_s, males_13_17_s, males_18_59_s, males_60_above_s, na.rm = T),
+    int.seek_work_gender_female = sum(females_6_12_s, females_13_17_s, females_18_59_s, females_60_above_s, na.rm = T),
+    int.number_minors_working = sum(males_6_12_w, males_13_17_w, females_6_12_w, females_13_17_w, na.rm = T),
+    int.number_minors_seeking_work = sum(males_6_12_s, males_13_17_s, females_6_12_s, females_13_17_s, na.rm = T),
+    int.number_newborn_and_veryyoung = sum(males_0_5, females_0_5, na.rm = T),
+    int.number_young_boys = sum(males_6_12, males_13_17, na.rm = T),
+    int.number_young_girls = sum(females_6_12, females_13_17, na.rm = T)
+    
+  ) %>% 
+  ungroup() %>% 
+  mutate(
+    
+    i.hh_y_gender = case_when(hh_y_size > 0 & int.hh_y_gender_male > 0 & int.hh_y_gender_female == 0 ~ "Male", 
+                              hh_y_size > 0 & int.hh_y_gender_male ==0 & int.hh_y_gender_female > 0 ~ "Female", 
+                              hh_y_size > 0 & int.hh_y_gender_male > 0 & int.hh_y_gender_female > 0 ~ "Male and Female", 
+                              hh_y_size == 0 ~ "None"),
+    i.seek_work_gender = case_when(hh_seek_work > 0 & int.seek_work_gender_male > 0 & int.seek_work_gender_female == 0 ~ "Male", 
+                                   hh_seek_work > 0 & int.seek_work_gender_male ==0 & int.seek_work_gender_female > 0 ~ "Female", 
+                                   hh_seek_work > 0 & int.seek_work_gender_male > 0 & int.seek_work_gender_female > 0 ~ "Male and Female", 
+                                   hh_seek_work == 0 ~ "None"),
+    i.minors_working = int.number_minors_working > 0,
+    i.minors_seeking_work = int.number_minors_seeking_work > 0,
+    i.hh_newborn_and_veryyoung_support = int.number_newborn_and_veryyoung >0,
+    i.hh_young_boys_support = int.number_young_boys >0,
+    i.hh_young_girls_support = int.number_young_girls >0, 
+    i.hh_adults_men = males_18_59 >0,
+    i.hh_adults_women = females_18_59 >0,
+    i.hh_elderly_men = males_60_above >0,
+    i.hh_elderly_women = females_60_above >0
+    
+  )
+
+```
+
+```{r, echo = TRUE}
+######  A.     Demographics ######
+
+# % HH by nationality -----------------------------------------------------
+
+df_percentage_by_nationarity <- df_add_new_variables %>% 
+  group_by(nationality_hoh) %>% 
+  summarise(
+    number_by_nationarity = n(),
+    percentage_by_nationarity = (number_by_nationarity/nrow(.))*100
+  )
+# plot
+df_percentage_by_nationarity_plot <- df_percentage_by_nationarity %>% 
+  mutate(
+    nationality_hoh = str_replace_all(nationality_hoh, "_", " "),
+    nationality_hoh = str_to_sentence(nationality_hoh)
+  ) %>%
+  ggplot(
+    aes(
+      x = percentage_by_nationarity, 
+      y = reorder(nationality_hoh, percentage_by_nationarity)
+             )
+    )+
+  geom_bar(stat = "identity", 
+           fill = "blue",
+           show.legend = FALSE) +
+  # scale_fill_brewer(type = "seq", name = "Nationality HH")+
+  # scale_fill_discrete(name = "Nationality HH")+
+  labs(
+      title = "Percentage of Household by Nationality",
+      x= "% Household by Nationality",
+      y= "Nationality"
+  )+
+  theme_gray()+
+  scale_x_continuous(breaks = c(0, 10,20,30,40,50,60,70,80,90,100))
+
+df_percentage_by_nationarity_plot
+# ggplotly(df_percentage_by_nationarity_plot)
+
+# % HH by marital status --------------------------------------------------
+
+df_percentage_by_marital_status <- df_add_new_variables %>% 
+  group_by(marital_status) %>% 
+  summarise(
+    number_by_marital_status = n(),
+    percentage_by_marital_status = (number_by_marital_status/nrow(.))*100
+  )
+# plot
+df_percentage_by_marital_status_plot <- df_percentage_by_marital_status %>%
+  mutate(
+    marital_status = str_replace_all(marital_status, "_", " "),
+    marital_status = str_to_sentence(marital_status)
+  ) %>%
+  ggplot(aes(y = reorder(marital_status, percentage_by_marital_status), 
+             x = percentage_by_marital_status
+             ))+
+  geom_bar(stat = "identity", 
+           fill = "red",
+           show.legend = FALSE)+
+  # scale_fill_brewer(name = "Marital Status")+
+  # scale_fill_discrete(name = "by Marital Status")+
+  labs(
+    title = "Percentage by Marital Status", 
+    y= "Marital Status",
+    x= "% by Marital Status"
+  )+
+  theme_gray()+
+  scale_x_continuous(breaks = c(0, 10,20,30,40,50,60,70,80,90,100))
+df_percentage_by_marital_status_plot
+
+
+# % HH by education_level -------------------------------------------------
+
+## % HH by education_level
+## % HHs by education classification
+df_percentage_by_education_level <- df_add_new_variables %>% 
+  group_by(i.education_cat) %>% 
+  summarise(
+    number_by_education_level = n(),
+    percentage_by_education_level = (number_by_education_level/nrow(.))*100
+  )
+# plot
+df_percentage_by_education_level_plot <- df_percentage_by_education_level %>%
+  # filter(i.education_cat != "NA") %>% 
+  ggplot(aes(x = reorder(i.education_cat, -percentage_by_education_level), 
+             y = percentage_by_education_level
+  ))+
+  geom_bar(stat = "identity", 
+           fill = "blue",
+           na.rm = TRUE, show.legend = FALSE)+
+  labs(
+    title = "Percentage of Household by Education Level", 
+    x= "",
+    y= "% Household by Education Level"
+  )+
+  theme_gray()+
+  theme(
+    axis.text.x = element_text(angle = 45),
+  )
+
+df_percentage_by_education_level_plot
+
+
+# % HH size (Not clear if there is a classification for HH Size) ----------
+## % HH size (Not clear if there is a classification for HH Size)
+
+
+# % HH supporting newborns and very young ---------------------------------
+
+df_percentage_hh_newborn_and_veryyoung_support <- df_add_new_variables %>%
+  group_by(i.hh_newborn_and_veryyoung_support) %>% 
+  summarise(
+    number_by_newborn_and_veryyoung_support = n(),
+    percentage_by_newborn_and_veryyoung_support = (number_by_newborn_and_veryyoung_support/nrow(.))*100
+  )
+df_percentage_hh_newborn_and_veryyoung_support
+
+# % HH supporting young_boys ----------------------------------------------
+
+df_percentage_hh_young_boys_support <- df_add_new_variables %>%
+  group_by(i.hh_young_boys_support) %>% 
+  summarise(
+    number_by_young_boys_support = n(),
+    percentage_by_young_boys_support = (number_by_young_boys_support/nrow(.))*100
+  )
+df_percentage_hh_young_boys_support
+
+# % HH supporting young_girls ---------------------------------------------
+
+df_percentage_hh_young_girls_support <- df_add_new_variables %>%
+  group_by(i.hh_young_girls_support ) %>% 
+  summarise(
+    number_by_young_girls_support = n(),
+    percentage_by_young_girls_support = (number_by_young_girls_support/nrow(.))*100
+  )
+df_percentage_hh_young_girls_support
+
+# % HH adults_men ---------------------------------------------------------
+
+df_percentage_hh_adults_men <- df_add_new_variables %>%
+  group_by(i.hh_adults_men) %>% 
+  summarise(
+    number_by_adults_men = n(),
+    percentage_by_adults_men = (number_by_adults_men/nrow(.))*100
+  )
+df_percentage_hh_adults_men
+
+# % HH adults women ------------------------------------------------------
+
+df_percentage_hh_adults_women <- df_add_new_variables %>%
+  group_by(i.hh_adults_women) %>% 
+  summarise(
+    number_by_adults_women = n(),
+    percentage_by_adults_women = (number_by_adults_women/nrow(.))*100
+  )
+df_percentage_hh_adults_women
+
+# % HH elderly_men --------------------------------------------------------
+ 
+df_percentage_hh_elderly_men <- df_add_new_variables %>%
+  group_by(i.hh_elderly_men ) %>% 
+  summarise(
+    number_by_elderly_men = n(),
+    percentage_by_elderly_men = (number_by_elderly_men/nrow(.))*100
+  )
+df_percentage_hh_elderly_men
+
+# % HH elderly_women ------------------------------------------------------
+
+df_percentage_hh_elderly_women <- df_add_new_variables %>%
+  group_by( i.hh_elderly_women) %>% 
+  summarise(
+    number_by_elderly_women = n(),
+    percentage_by_elderly_women = (number_by_elderly_women/nrow(.))*100
+  )
+df_percentage_hh_elderly_women
+
+# some plots in this section ----------------------------------------------
+
+demographics_figure <- ggarrange(
+  df_percentage_by_nationarity_plot, 
+  df_percentage_by_marital_status_plot, 
+  df_percentage_by_education_level_plot,
+                    ncol = 2, nrow = 2)
+demographics_figure
+
+
+######  B.    Income & livelihood     ######
+
+# %HH Primary livelihood_source -------------------------------------------
+
+df_percentage_hh_livelihood_source <- df_add_new_variables %>%
+  group_by(main_livelihood) %>% 
+  summarise(
+    count_by_main_livelihood = n(),
+    percentage_by_main_livelihood = (count_by_main_livelihood/nrow(.))*100
+  )
+
+# plot
+df_top5_hh_livelihood_source_plot <- df_percentage_hh_livelihood_source %>% 
+  mutate(
+    main_livelihood = str_replace_all(main_livelihood, "_", " "),
+    main_livelihood = str_to_sentence(main_livelihood)
+  ) %>%
+  top_n(5) %>% 
+  ggplot(aes(y = fct_reorder(main_livelihood, count_by_main_livelihood), 
+             x = count_by_main_livelihood))+
+  geom_bar(stat = "identity",
+           fill = "red",
+           show.legend = FALSE)+
+  labs(
+    title = "Top 5 ways of Main Livelihood", 
+    x= "",
+    y= "Main Livelihood"
+  )+
+  theme_gray()
+
+df_top5_hh_livelihood_source_plot
+
+
+# %HH secondary_livelihood_source -----------------------------------------
+
+df_percentage_hh_secondary_livelihood_source <- df_add_new_variables %>%
+  group_by(additional_livelihood) %>% 
+  summarise(
+    count_by_secondary_livelihood_source = n(),
+    percentage_by_secondary_livelihood_source = (count_by_secondary_livelihood_source/nrow(.))*100
+  )
+# top 5 seconary/additional livelihood plot
+df_top5_hh_secondary_livelihood_source_plot <- df_percentage_hh_secondary_livelihood_source %>%
+  mutate(
+    additional_livelihood = str_replace_all(additional_livelihood, "_", " "),
+    additional_livelihood = str_to_sentence(additional_livelihood)
+  ) %>%
+  top_n(5) %>% 
+  ggplot(aes(y = fct_reorder(additional_livelihood, count_by_secondary_livelihood_source), 
+             x = count_by_secondary_livelihood_source))+
+  geom_bar(stat = "identity",
+           fill = "red",
+           show.legend = FALSE)+
+  labs(
+    title = "Top 5 ways of Secondary Livelihood", 
+    x= "",
+    y= "Secondary Livelihood"
+  )+
+  theme_gray()
+
+df_top5_hh_secondary_livelihood_source_plot
+
+
+# % HH alternative sources of income --------------------------------------
+
+df_coping_strategy_choices <- df_add_new_variables %>% 
+  select( starts_with("coping_strategy/") ) %>% 
+  colnames() %>% 
+  str_replace("coping_strategy/", "")
+
+df_percentage_hh_coping_strategy <- df_add_new_variables %>% 
+  filter(
+    coping_strategy %in% df_coping_strategy_choices
+  ) %>% 
+  group_by(
+    coping_strategy
+  ) %>% 
+  summarise(
+    count_by_alternative_income_sources = n(),
+    percentage_by_alternative_income_sources = (count_by_alternative_income_sources/nrow(.))*100
+  )
+# plot
+df_top5_hh_coping_strategy_plot <- df_percentage_hh_coping_strategy %>% 
+  mutate(
+    coping_strategy = str_replace_all(coping_strategy, "_", " "),
+    coping_strategy = str_to_sentence(coping_strategy)
+  ) %>% 
+  top_n(5) %>% 
+  ggplot(aes(y = fct_reorder(coping_strategy, count_by_alternative_income_sources), 
+             x = count_by_alternative_income_sources))+
+  geom_bar(stat = "identity",
+           fill = "red",
+           show.legend = FALSE)+
+  labs(
+    title = "Top 5 Alternative Income Sources", 
+    x= "",
+    y= "Alternative Income Sources"
+  )+
+  theme_gray()
+
+df_top5_hh_coping_strategy_plot
+
+
+# % HHs by income classification ------------------------------------------
+
+## % HH by income range
+## % HHs by income classification
+
+df_percentage_hh_income_by_classification <- df_add_new_variables %>%
+  group_by(i.income_cat) %>% 
+  summarise(
+    count_by_income_cat = n(),
+    percentage_by_income_cat = (count_by_income_cat/nrow(.))*100
+  )
+df_percentage_hh_income_by_classification_plot <- df_percentage_hh_income_by_classification %>% 
+  ggplot(aes(y = fct_reorder(i.income_cat, percentage_by_income_cat), 
+             x = percentage_by_income_cat))+
+  geom_bar(stat = "identity",
+           fill = "red",
+           show.legend = FALSE)+
+  labs(
+    title = "Household Income by Classification", 
+    x= "",
+    y= "Income Classification"
+  )+
+  theme_gray()
+df_percentage_hh_income_by_classification_plot
+
+ 
+
+# %HH not enough income to meet basic needs -------------------------------
+
+df_hh_percentage_unsufficient_income <- df_add_new_variables %>% 
+  group_by(status, monthly_y_sufficient) %>% 
+  summarise(
+    count_by_sufficient_income = n(),
+    percentage_by_sufficient_income = (count_by_sufficient_income/nrow(.))*100
+  )
+
+df_hh_percentage_unsufficient_income_plot <- df_hh_percentage_unsufficient_income %>% 
+  ggplot(aes(y = fct_reorder(status, percentage_by_sufficient_income), 
+             x = percentage_by_sufficient_income,
+             fill = monthly_y_sufficient
+             ))+
+  geom_bar(stat = "identity",
+           # fill = "red",
+           # position = position_stack(reverse = TRUE),
+           position = "dodge2",
+           show.legend = TRUE)+
+  labs(
+    title = "Sufficiency of monthly income", 
+    x= "% by insufficient income",
+    y= "Community/Settlement"
+  )+
+  guides(fill =guide_legend(title = "Monthly Income Sufficient") )+
+  theme_gray()
+df_hh_percentage_unsufficient_income_plot
+
+
+# %HH challenges to generating sufficient income --------------------------
+
+df_hh_challenges_for_unsufficient_income <- df_add_new_variables %>% 
+  group_by(status, reason_less_y) %>% 
+  summarise(
+    count_by_reason_less_income = n(),
+    percentage_by_reason_less_income = (count_by_reason_less_income/nrow(.))*100
+  )
+
+df_hh_challenges_for_unsufficient_income_plot <- df_hh_challenges_for_unsufficient_income %>% 
+  mutate(
+    status = str_replace_all(status, "_", " "),
+    status = str_to_sentence(status),
+    reason_less_y = str_replace_all(reason_less_y, "_", " "),
+    reason_less_y = str_to_sentence(reason_less_y)
+  ) %>% 
+  top_n(3) %>% 
+  ggplot(
+    aes(
+      y = fct_reorder(status, percentage_by_reason_less_income), 
+      x = percentage_by_reason_less_income,
+      fill = reason_less_y
+    )
+  )+
+  geom_bar(stat = "identity",
+           # fill = "red",
+           # position = position_stack(reverse = TRUE),
+           position = "dodge2",
+           show.legend = TRUE)+
+  labs(
+    title = "Top 3 reasons for insufficient monthly income", 
+    x= "% by reason for insufficient income",
+    y= ""
+  )+
+  guides(fill =guide_legend(title = "Monthly Income Sufficient") )+
+  theme_gray()
+
+df_hh_challenges_for_unsufficient_income_plot
+
+
+
+# % HH with more than one earning member ----------------------------------
+
+df_hh_more_earning_members <- df_add_new_variables %>%
+  mutate(
+    int.more_earning_members = hh_y_size >1
+  ) %>% 
+  group_by( status, int.more_earning_members ) %>% 
+  summarise(
+    count_by_more_earning_members = n(),
+    percentage_by_more_earning_members = (count_by_more_earning_members/nrow(.))*100
+  )
+# plot
+df_hh_more_earning_members_plot <- df_hh_more_earning_members %>% 
+  mutate(
+    status = str_replace_all(status, "_", " "),
+    status = str_to_sentence(status)
+  ) %>% 
+  ggplot(
+    aes(
+      y = fct_reorder(status, percentage_by_more_earning_members), 
+      x = percentage_by_more_earning_members,
+      fill = int.more_earning_members
+    )
+  )+
+  geom_bar(stat = "identity",
+           position = "dodge2",
+           show.legend = TRUE)+
+  labs(
+    title = "Percentage of HH with more than one earning member", 
+    x= "% by HH",
+    y= ""
+  )+
+  guides(fill =guide_legend(title = "More than one earning member") )+
+  theme_gray()
+
+df_hh_more_earning_members_plot
+
+# % HH with young boys reported as working ---------------------------
+df_hh_young_boys_working <- df_add_new_variables %>%
+  mutate(
+    int.young_boys_working = males_6_12_w > 0
+  ) %>% 
+  group_by(
+    status, int.young_boys_working
+  ) %>% 
+  summarise(
+    count_by_young_boys_working = n(),
+    percentage_by_young_boys_working = (count_by_young_boys_working/nrow(.))*100
+  )
+# plot
+df_hh_young_boys_working_plot <- df_hh_young_boys_working %>% 
+  mutate(
+    status = str_replace_all(status, "_", " "),
+    status = str_to_sentence(status)
+  ) %>% 
+  ggplot(
+    aes(
+      y = fct_reorder(status, percentage_by_young_boys_working), 
+      x = percentage_by_young_boys_working,
+      fill = int.young_boys_working
+    )
+  )+
+  geom_bar(stat = "identity",
+           position = "dodge2",
+           show.legend = TRUE)+
+  labs(
+    title = "Percentage of HH with young boys working", 
+    x= "% by HH",
+    y= ""
+  )+
+  guides(fill =guide_legend(title = "young boys working") )+
+  theme_gray()
+
+df_hh_young_boys_working_plot
+  
+# % HH with young girls reported as working ---------------------------------
+df_hh_young_girls_working <- df_add_new_variables %>%
+  mutate(
+    int.young_girls_working = females_6_12_w > 0 | females_13_17_w > 0
+  ) %>% 
+  group_by(
+    status, int.young_girls_working
+  ) %>% 
+  summarise(
+    count_by_young_girls_working = n(),
+    percentage_by_young_girls_working = (count_by_young_girls_working/nrow(.))*100
+  )
+# plot
+df_hh_young_girls_working_plot <- df_hh_young_girls_working %>% 
+  mutate(
+    status = str_replace_all(status, "_", " "),
+    status = str_to_sentence(status)
+  ) %>% 
+  ggplot(
+    aes(
+      y = fct_reorder(status, percentage_by_young_girls_working), 
+      x = percentage_by_young_girls_working,
+      fill = int.young_girls_working
+    )
+  )+
+  geom_bar(stat = "identity",
+           position = "dodge2",
+           show.legend = TRUE)+
+  labs(
+    title = "Percentage of HH with young girls working", 
+    x= "% by HH",
+    y= ""
+  )+
+  guides(fill =guide_legend(title = "young girls working") )+
+  theme_gray()
+
+df_hh_young_girls_working_plot
+
+### average # of minors working per HH? -------------------------------------
+
+df_hh_average_minors_working <- df_add_new_variables %>%
+  group_by(status) %>% 
+  summarise(
+    mean(int.number_minors_working)
+  )
+
+df_hh_average_minors_working
+
+# % HH with male_youth working ----------------------------------------------
+df_hh_male_youth_working <- df_add_new_variables %>%
+  mutate(
+    int.male_youth_working = males_13_17_w > 0
+  ) %>% 
+  group_by(
+    status, int.male_youth_working
+  ) %>% 
+  summarise(
+    count_by_male_youth_working = n(),
+    percentage_by_male_youth_working = (count_by_male_youth_working/nrow(.))*100
+  )
+# plot
+df_hh_male_youth_working_plot <- df_hh_male_youth_working %>% 
+  mutate(
+    status = str_replace_all(status, "_", " "),
+    status = str_to_sentence(status)
+  ) %>% 
+  ggplot(
+    aes(
+      y = fct_reorder(status, percentage_by_male_youth_working), 
+      x = percentage_by_male_youth_working,
+      fill = int.male_youth_working
+    )
+  )+
+  geom_bar(stat = "identity",
+           position = "dodge2",
+           show.legend = TRUE)+
+  labs(
+    title = "Percentage of HH with male youth working", 
+    x= "% by HH",
+    y= ""
+  )+
+  guides(fill =guide_legend(title = "male youth working") )+
+  theme_gray()
+
+df_hh_male_youth_working_plot
+
+# % HH with female youth working --------------------------------------------
+df_hh_female_youth_working <- df_add_new_variables %>%
+  mutate(
+    int.female_youth_working = females_13_17_w > 0
+  ) %>% 
+  group_by(
+    status, int.female_youth_working
+  ) %>% 
+  summarise(
+    count_by_female_youth_working = n(),
+    percentage_by_female_youth_working = (count_by_female_youth_working/nrow(.))*100
+  )
+# plot
+df_hh_female_youth_working_plot <- df_hh_female_youth_working %>% 
+  mutate(
+    status = str_replace_all(status, "_", " "),
+    status = str_to_sentence(status)
+  ) %>% 
+  ggplot(
+    aes(
+      y = fct_reorder(status, percentage_by_female_youth_working), 
+      x = percentage_by_female_youth_working,
+      fill = int.female_youth_working
+    )
+  )+
+  geom_bar(stat = "identity",
+           position = "dodge2",
+           show.legend = TRUE)+
+  labs(
+    title = "Percentage of HH with female youth working", 
+    x= "% by HH",
+    y= ""
+  )+
+  guides(fill =guide_legend(title = "female youth working") )+
+  theme_gray()
+
+df_hh_female_youth_working_plot
+
+# % HH with male adults working --------------------------------------------
+df_hh_male_adults_working <- df_add_new_variables %>%
+  mutate(
+    int.male_adults_working = males_18_59_w > 0
+  ) %>% 
+  group_by(
+    status, int.male_adults_working
+  ) %>% 
+  summarise(
+    count_by_male_adults_working = n(),
+    percentage_by_male_adults_working = (count_by_male_adults_working/nrow(.))*100
+  )
+df_hh_male_adults_working
+# % HH with female adults working --------------------------------------------
+df_hh_female_adults_working <- df_add_new_variables %>%
+  mutate(
+    int.female_adults_working = females_18_59_w > 0
+  ) %>% 
+  group_by(
+    status, int.female_adults_working
+  ) %>% 
+  summarise(
+    count_by_female_adults_working = n(),
+    percentage_by_female_adults_working = (count_by_female_adults_working/nrow(.))*100
+  )
+df_hh_female_adults_working
+# % HH with male elderly working --------------------------------------------
+df_hh_male_elderly_working <- df_add_new_variables %>%
+  mutate(
+    int.male_elderly_working = males_60_above_w > 0
+  ) %>% 
+  group_by(
+    status, int.male_elderly_working
+  ) %>% 
+  summarise(
+    count_by_male_elderly_working = n(),
+    percentage_by_male_elderly_working = (count_by_male_elderly_working/nrow(.))*100
+  )
+df_hh_male_elderly_working
+
+# % HH with female elderly working --------------------------------------------
+df_hh_female_elderly_working <- df_add_new_variables %>%
+  mutate(
+    int.female_elderly_working = females_60_above_w > 0
+  ) %>% 
+  group_by(
+    status, int.female_elderly_working
+  ) %>% 
+  summarise(
+    count_by_female_elderly_working = n(),
+    percentage_by_female_elderly_working = (count_by_female_elderly_working/nrow(.))*100
+  )
+df_hh_female_elderly_working
+
+# % HH by # of underemployed members --------------------------------------------
+df_hh_more_earning_members <- df_add_new_variables %>%
+  mutate(
+    int.hh_seek_work = hh_seek_work >0
+  ) %>% 
+  group_by( status, int.hh_seek_work ) %>% 
+  summarise(
+    count_by_hh_seek_work = n(),
+    percentage_by_hh_seek_work = (count_by_hh_seek_work/nrow(.))*100
+  )
+df_hh_more_earning_members
+
+# % HH with young boys reported as seeking_work --------------------------------------------
+df_hh_young_boys_seeking_work <- df_add_new_variables %>%
+  mutate(
+    int.young_boys_seeking_work = males_6_12_s > 0
+  ) %>% 
+  group_by(
+    status, int.young_boys_seeking_work
+  ) %>% 
+  summarise(
+    count_by_young_boys_seeking_work = n(),
+    percentage_by_young_boys_seeking_work = (count_by_young_boys_seeking_work/nrow(.))*100
+  )
+df_hh_young_boys_seeking_work
+
+# % HH with young girls reported as seeking work --------------------------------------------
+df_hh_young_girls_seeking_work <- df_add_new_variables %>%
+  mutate(
+    int.young_girls_seeking_work = females_6_12_s > 0
+  ) %>% 
+  group_by(
+    status, int.young_girls_seeking_work
+  ) %>% 
+  summarise(
+    count_by_young_girls_seeking_work = n(),
+    percentage_by_young_girls_seeking_work = (count_by_young_girls_seeking_work/nrow(.))*100
+  )
+df_hh_young_girls_seeking_work
+
+### % HH with a 6 to 12 yr old seeking work? --------------------------------
+df_hh_minors_seeking_work <- df_add_new_variables %>%
+  group_by(
+    status, i.minors_seeking_work
+  ) %>% 
+  summarise(
+    count_by_minors_seeking_work = n(),
+    percentage_by_minors_seeking_work = (count_by_minors_seeking_work/nrow(.))*100
+  )
+df_hh_minors_seeking_work
+
+# % HH with male_youth seeking work --------------------------------------------
+df_hh_male_youth_seeking_work <- df_add_new_variables %>%
+  mutate(
+    int.male_youth_seeking_work = males_13_17_s > 0
+  ) %>% 
+  group_by(
+    status, int.male_youth_seeking_work
+  ) %>% 
+  summarise(
+    count_by_male_youth_seeking_work = n(),
+    percentage_by_male_youth_seeking_work = (count_by_male_youth_seeking_work/nrow(.))*100
+  )
+df_hh_male_youth_seeking_work
+
+# % HH with female youth seeking work --------------------------------------------
+df_hh_female_youth_seeking_work <- df_add_new_variables %>%
+  mutate(
+    int.female_youth_seeking_work = females_13_17_s > 0
+  ) %>% 
+  group_by(
+    status, int.female_youth_seeking_work
+  ) %>% 
+  summarise(
+    count_by_female_youth_seeking_work = n(),
+    percentage_by_female_youth_seeking_work = (count_by_female_youth_seeking_work/nrow(.))*100
+  )
+df_hh_female_youth_seeking_work
+
+# % HH with male adults seeking work --------------------------------------------
+df_hh_male_adults_seeking_work <- df_add_new_variables %>%
+  mutate(
+    int.male_adults_seeking_work = males_18_59_s > 0
+  ) %>% 
+  group_by(
+    status, int.male_adults_seeking_work
+  ) %>% 
+  summarise(
+    count_by_male_adults_seeking_work = n(),
+    percentage_by_male_adults_seeking_work = (count_by_male_adults_seeking_work/nrow(.))*100
+  )
+df_hh_male_adults_seeking_work
+
+# % HH with female adults seeking work --------------------------------------------
+df_hh_female_adults_seeking_work <- df_add_new_variables %>%
+  mutate(
+    int.female_adults_seeking_work = females_18_59_s > 0
+  ) %>% 
+  group_by(
+    status, int.female_adults_seeking_work
+  ) %>% 
+  summarise(
+    count_by_female_adults_seeking_work = n(),
+    percentage_by_female_adults_seeking_work = (count_by_female_adults_seeking_work/nrow(.))*100
+  )
+df_hh_female_adults_seeking_work
+
+# % HH with male elderly seeking work --------------------------------------------
+df_hh_male_elderly_seeking_work <- df_add_new_variables %>%
+  mutate(
+    int.male_elderly_seeking_work = males_60_above_s > 0
+  ) %>% 
+  group_by(
+    status, int.male_elderly_seeking_work
+  ) %>% 
+  summarise(
+    count_by_male_elderly_seeking_work = n(),
+    percentage_by_male_elderly_seeking_work = (count_by_male_elderly_seeking_work/nrow(.))*100
+  )
+df_hh_male_elderly_seeking_work
+
+# % HH with female elderly seeking work --------------------------------------------
+df_hh_female_elderly_seeking_work <- df_add_new_variables %>%
+  mutate(
+    int.female_elderly_seeking_work = females_60_above_s > 0
+  ) %>% 
+  group_by(
+    status, int.female_elderly_seeking_work
+  ) %>% 
+  summarise(
+    count_by_female_elderly_seeking_work = n(),
+    percentage_by_female_elderly_seeking_work = (count_by_female_elderly_seeking_work/nrow(.))*100
+  )
+df_hh_female_elderly_seeking_work
+
+# % HH naming sectors_of_interest --------------------------------------------
+df_sectors_of_interest_choices <- df_add_new_variables %>% 
+  select( starts_with("sector_pref/") ) %>% 
+  colnames() %>% 
+  str_replace("sector_pref/", "")
+
+df_percentage_hh_sectors_of_interest <- df_add_new_variables %>% 
+  filter(
+    sector_pref %in% df_sectors_of_interest_choices
+  ) %>% 
+  group_by(
+    sector_pref
+  ) %>% 
+  summarise(
+    count_by_sectors_of_interest = n(),
+    percentage_by_sectors_of_interest = (count_by_sectors_of_interest/nrow(.))*100
+  )
+# plot
+df_top5_hh_sectors_of_interest_plot <- df_percentage_hh_sectors_of_interest %>% 
+  mutate(
+    sector_pref = str_replace_all(sector_pref, "_", " "),
+    sector_pref = str_to_sentence(sector_pref)
+  ) %>% 
+  top_n(5) %>% 
+  ggplot(aes(y = fct_reorder(sector_pref, percentage_by_sectors_of_interest), 
+             x = percentage_by_sectors_of_interest))+
+  geom_bar(stat = "identity",
+           fill = "red",
+           show.legend = FALSE)+
+  labs(
+    title = "Top 5 sectors of interest", 
+    x= "",
+    y= "Sectors of interest"
+  )+
+  theme_gray()
+
+df_top5_hh_sectors_of_interest_plot
+
+# % HH reasons for sector  --------------------------------------------
+df_sector_appeal_choices <- df_add_new_variables %>% 
+  select( starts_with("sector_appeal/") ) %>% 
+  colnames() %>% 
+  str_replace("sector_appeal/", "")
+
+df_percentage_hh_sector_appeal <- df_add_new_variables %>% 
+  filter(
+    sector_appeal %in% df_sector_appeal_choices
+  ) %>% 
+  group_by(
+    sector_appeal
+  ) %>% 
+  summarise(
+    count_by_sector_appeal = n(),
+    percentage_by_sector_appeal = (count_by_sector_appeal/nrow(.))*100
+  )
+# plot
+df_top3_hh_sector_appeal_plot <- df_percentage_hh_sector_appeal %>% 
+  mutate(
+    sector_appeal = str_replace_all(sector_appeal, "_", " "),
+    sector_appeal = str_to_sentence(sector_appeal)
+  ) %>% 
+  top_n(3) %>% 
+  ggplot(aes(y = fct_reorder(sector_appeal, percentage_by_sector_appeal), 
+             x = percentage_by_sector_appeal))+
+  geom_bar(stat = "identity",
+           fill = "red",
+           show.legend = FALSE)+
+  labs(
+    title = "Top 3 Reasons for sector preference", 
+    x= "",
+    y= "Reasons for sector preference"
+  )+
+  theme_gray()
+
+df_top3_hh_sector_appeal_plot
+
+# %HH challenges in pursuing alternative livelihood --------------------------------------------
+# challenge_pursuing_alt_livelihood
+df_challenge_pursuing_alt_livelihood <- df_add_new_variables %>% 
+  select( starts_with("chall_find_job/") ) %>% 
+  colnames() %>% 
+  str_replace("chall_find_job/", "")
+
+df_percentage_challenge_pursuing_alt_livelihood <- df_add_new_variables %>% 
+  filter(
+    chall_find_job %in% df_challenge_pursuing_alt_livelihood
+  ) %>% 
+  group_by(
+    chall_find_job
+  ) %>% 
+  summarise(
+    count_by_challenge_pursuing_alt_livelihood = n(),
+    percentage_challenge_pursuing_alt_livelihood = (count_by_challenge_pursuing_alt_livelihood/nrow(.))*100
+  )
+# plot
+df_top3_challenge_pursuing_alt_livelihood <- df_percentage_challenge_pursuing_alt_livelihood %>% 
+  mutate(
+    chall_find_job = str_replace_all(chall_find_job, "_", " "),
+    chall_find_job = str_to_sentence(chall_find_job)
+  ) %>% 
+  top_n(3) %>% 
+  ggplot(aes(y = fct_reorder(chall_find_job, percentage_challenge_pursuing_alt_livelihood), 
+             x = percentage_challenge_pursuing_alt_livelihood))+
+  geom_bar(stat = "identity",
+           fill = "red",
+           show.legend = FALSE)+
+  labs(
+    title = "Top 3 challenges in pursuing alternative livelihood", 
+    x= "",
+    y= "challenges"
+  )+
+  theme_gray()
+
+df_top3_challenge_pursuing_alt_livelihood
+
+# %HH by most useful income support --------------------------------------------
+# most_useful_income_support
+df_percentage_most_useful_income_support <- df_add_new_variables %>% 
+  group_by(
+    work_support
+  ) %>% 
+  summarise(
+    count_by_most_useful_income_support = n(),
+    percentage_most_useful_income_support = (count_by_most_useful_income_support/nrow(.))*100
+  )
+# plot
+df_top5_most_useful_income_support <- df_percentage_most_useful_income_support %>% 
+  mutate(
+    work_support = str_replace_all(work_support, "_", " "),
+    work_support = str_to_sentence(work_support)
+  ) %>% 
+  top_n(5) %>% 
+  ggplot(aes(y = fct_reorder(work_support, percentage_most_useful_income_support), 
+             x = percentage_most_useful_income_support))+
+  geom_bar(stat = "identity",
+           fill = "red",
+           show.legend = FALSE)+
+  labs(
+    title = "Top 5 challenges in pursuing alternative livelihood", 
+    x= "",
+    y= "challenges"
+  )+
+  theme_gray()
+
+df_top5_most_useful_income_support
+
+######  C.  Agricultural livelihoods and Non-agricultural livelihoods ######
+# % HH owning livestock --------------------------------------------
+df_percentage_hh_owning_livestock <- df_add_new_variables %>% 
+  group_by(
+    hh_own_livestock
+  ) %>% 
+  summarise(
+    count_by_hh_own_livestock = n(),
+    percentage_by_hh_own_livestock = (count_by_hh_own_livestock/nrow(.))*100
+  )
+df_percentage_hh_owning_livestock
+
+# % HH type of livestock --------------------------------------------
+df_hh_type_of_livestock_choices <- df_add_new_variables %>% 
+  select( starts_with("livestock_type/") ) %>% 
+  colnames() %>% 
+  str_replace("livestock_type/", "")
+
+df_percentage_hh_type_of_livestock <- df_add_new_variables %>% 
+  filter(
+    livestock_type %in% df_hh_type_of_livestock_choices
+  ) %>% 
+  group_by(
+    livestock_type
+  ) %>% 
+  summarise(
+    count_by_hh_type_of_livestock = n(),
+    percentage_by_hh_type_of_livestock = (count_by_hh_type_of_livestock/nrow(.))*100
+  )
+df_percentage_hh_type_of_livestock
+
+```
