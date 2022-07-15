@@ -14,7 +14,7 @@ library(ggpubr)
 
 data_collection_start <- as_date("2021-02-15")
 
-df_raw <- read_csv(file = "./inputs/UGA2101a_Rapid_Assessment_on_Livelihood_and_Market_Strengthening_Opportunities_March2021_Data.csv")%>%
+df_raw <- read_csv(file = "../inputs/UGA2101a_Rapid_Assessment_on_Livelihood_and_Market_Strengthening_Opportunities_March2021_Data.csv")%>%
     filter( today >= data_collection_start )
 
 ```

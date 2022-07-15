@@ -17,7 +17,7 @@ library(crosstalk)
 
 
 # import data
-df_raw <- read_csv(file = "outputs/checked_data_issues_2021-03-03_9.csv") %>%
+df_raw <- read_csv(file = "../outputs/checked_data_issues_2021-03-03_9.csv") %>%
   select(
     uuid,    district_name,    sub_county_name,    status,    refugee_settle_name,
     survey_time_interval,    time_between_survey,    found_issue,    today,
