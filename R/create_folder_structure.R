@@ -2,7 +2,7 @@
 
 create_folder_structure <- function(input_sub_folders = c("outputs", "inputs", "R", "support_files")) {
   sub_directories <- input_sub_folders
-  # iterate the subfolders and create them
+  # iterate the sub folders and create them
   for(x in sub_directories){
     # check folder existence
     check_folder <- dir.exists(paste0(getwd(),"/",x))
